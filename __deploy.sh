@@ -1,19 +1,25 @@
 #!/bin/bash
+set -e 
 
-[[ -d ~/bin ]] || mkdir ~/bin
+BIN_DIR=~/.local/bin
+[[ -d $BIN_DIR ]] || mkdir -p  $BIN_DIR
 
 DIR=$(dirname "$(readlink -f "$0")")
 
-curl -s https://github.com/neovide/neovide/releases/latest/download/neovide.AppImage -L -o ~/bin/neovide
-chmod +x ~/bin/neovide
+curl -s https://github.com/neovide/neovide/releases/latest/download/neovide.AppImage -L -o $BIN_DIR/neovide
+chmod +x $BIN_DIR/neovide
 
 cd "$DIR" || exit
 
-cp neovide-wrapper.sh ~/bin/
-chmod +x ~/bin/neovide-wrapper.sh
+cp neovide-wrapper.sh $BIN_DIR/
+sed -i "s|BIN_DIR|$BIN_DIR|g" $BIN_DIR/neovide-wrapper.sh
+sed -i "s|HOME|$HOME|g" $BIN_DIR/neovide-wrapper.sh
+chmod +x $BIN_DIR/neovide-wrapper.sh
 cp neovide.desktop ~/.local/share/applications/
 cp neovide.svg ~/.local/share/icons/
 
+sed -i "s|BIN_DIR|$BIN_DIR|g" ~/.local/share/applications/neovide.desktop
+sed -i "s|HOME|$HOME|g" ~/.local/share/applications/neovide.desktop
 update-desktop-database ~/.local/share/applications/
 
 if pip show neovim-remote > /dev/null 2>&1; then
