@@ -6,7 +6,7 @@ BIN_DIR=~/.local/bin
 
 DIR=$(dirname "$(readlink -f "$0")")
 
-curl -s https://github.com/neovide/neovide/releases/latest/download/neovide.AppImage -L -o $BIN_DIR/neovide
+curl -# https://github.com/neovide/neovide/releases/latest/download/neovide.AppImage -L -o $BIN_DIR/neovide
 chmod +x $BIN_DIR/neovide
 
 cd "$DIR" || exit
