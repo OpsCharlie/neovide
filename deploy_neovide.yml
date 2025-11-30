@@ -1,0 +1,129 @@
+---
+# vim: set ft=yaml.ansible:
+
+- name: Deploy Neovide
+  hosts: localhost
+  become: false
+  vars:
+    bin_dir: "{{ ansible_user_dir }}/.local/bin"
+    deploy_dir: "{{ playbook_dir }}"
+    repo_url: "https://api.github.com/repos/neovide/neovide/releases/latest"
+    filename: "neovide.AppImage"
+
+  tasks:
+    - name: Check required commands
+      ansible.builtin.command: "which {{ item }}"
+      register: required_commands
+      failed_when: false
+      changed_when: false
+      loop:
+        - jq
+        - curl
+
+    - name: Fail if required commands are missing
+      ansible.builtin.fail:
+        msg: "{{ item.item }} is required but not installed"
+      when: item.rc != 0
+      loop: "{{ required_commands.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Create local bin directory
+      ansible.builtin.file:
+        path: "{{ bin_dir }}"
+        state: directory
+        mode: "0750"
+
+    - name: Fetch latest release information
+      ansible.builtin.uri:
+        url: "{{ repo_url }}"
+        method: GET
+        return_content: true
+      register: release_info
+
+    - name: Extract latest version
+      ansible.builtin.set_fact:
+        latest_version: "{{ release_info.json | json_query('tag_name') }}"
+
+    - name: Check if Neovide is already installed
+      ansible.builtin.command: "{{ bin_dir }}/neovide --version"
+      register: installed_version
+      failed_when: false
+      changed_when: false
+
+    - name: Set installation needed flag
+      ansible.builtin.set_fact:
+        install_needed: "{{ installed_version.rc != 0 or (installed_version.stdout | regex_replace('^neovide ', '') | default('') != latest_version) }}"
+
+    - name: Display version information
+      ansible.builtin.debug:
+        msg: |
+          Latest: {{ latest_version }}
+          Installed: {{ installed_version.stdout | default('Not installed') }}
+          Install needed: {{ install_needed }}
+
+    - name: Download Neovide AppImage
+      ansible.builtin.get_url:
+        url: "https://github.com/neovide/neovide/releases/latest/download/{{ filename }}"
+        dest: "{{ bin_dir }}/neovide_{{ latest_version }}"
+        mode: "0750"
+      register: neovide_download
+      when: install_needed
+
+    - name: Create symlink
+      ansible.builtin.file:
+        src: "{{ bin_dir }}/neovide_{{ latest_version }}"
+        dest: "{{ bin_dir }}/neovide"
+        state: link
+      when: install_needed
+
+    - name: Read neovide wrapper script
+      ansible.builtin.slurp:
+        src: "{{ deploy_dir }}/neovide-wrapper.sh"
+      register: wrapper_script
+
+    - name: Create neovide wrapper script with paths
+      ansible.builtin.copy:
+        content: "{{ wrapper_script.content | b64decode | regex_replace('BIN_DIR', bin_dir) | regex_replace('HOME', ansible_user_dir) }}"
+        dest: "{{ bin_dir }}/neovide-wrapper.sh"
+        mode: "0750"
+      when: install_needed
+
+    - name: Read desktop file
+      ansible.builtin.slurp:
+        src: "{{ deploy_dir }}/neovide.desktop"
+      register: desktop_file
+
+    - name: Create applications directory
+      ansible.builtin.file:
+        path: "{{ ansible_user_dir }}/.local/share/applications"
+        state: directory
+        mode: "0750"
+
+    - name: Create desktop file with paths
+      ansible.builtin.copy:
+        content: "{{ desktop_file.content | b64decode | regex_replace('BIN_DIR', bin_dir) | regex_replace('HOME', ansible_user_dir) }}"
+        dest: "{{ ansible_user_dir }}/.local/share/applications/neovide.desktop"
+        mode: "0640"
+
+    - name: Create icons directory
+      ansible.builtin.file:
+        path: "{{ ansible_user_dir }}/.local/share/icons"
+        state: directory
+        mode: "0750"
+
+    - name: Copy icon file
+      ansible.builtin.copy:
+        src: "{{ deploy_dir }}/neovide.svg"
+        dest: "{{ ansible_user_dir }}/.local/share/icons/neovide.svg"
+        mode: "0640"
+
+    - name: Check if neovim-remote is installed
+      ansible.builtin.pip:
+        name: neovim-remote
+        state: present
+      register: nvr_install
+
+    - name: Update desktop database
+      ansible.builtin.command: update-desktop-database {{ ansible_user_dir }}/.local/share/applications
+      changed_when: false
