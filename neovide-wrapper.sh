@@ -18,6 +18,6 @@ export PATH
 if nvr --serverlist | grep -q vimsocket; then
   nvr --remote-tab "$@"
 else
-  cd ~/ansible/lxd/roles || cd ~
-  exec BIN_DIR/neovide "$@" -- --listen /tmp/nvimsocket
+  cd ~/ansible/lxd/roles || cd ~ || exit
+  exec BIN_DIR/neovide --neovim-bin BIN_DIR/nvim "$@" -- --listen /tmp/nvimsocket
 fi
